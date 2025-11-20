@@ -1,8 +1,8 @@
-/*
+    /*
  * (C) 2025, Cornell University
  * All rights reserved.
  *
- * Description: generate disk image (disk.img) and ROM image (fpgaROM.bin)
+ * Description: generate disk image (disk.img) and ROM image (bootROM.bin)
  * The disk image should be exactly 4MB:
  *     2MB holds the executables of EGOS and system servers;
  *     2MB is managed by a file system.
@@ -25,27 +25,29 @@
 #include <sys/types.h>
 #include "inode.h"
 
-char* egos_binaries[] = {"./egos.bin",
+char* egos_binaries[] = {"./qemu/egos.bin",
                          "../build/release/sys_proc.elf",
                          "../build/release/sys_terminal.elf",
                          "../build/release/sys_file.elf",
                          "../build/release/sys_shell.elf",
-                         "./images/Bohr.bmp" /* for the video demo app */};
-#define EGOS_BIN_NUM ((sizeof(egos_binaries) / sizeof(char*)))
+                         "./screenshots/Bohr.bmp" /* for the VGA demo */};
+#define EGOS_BIN_NUM ((sizeof(egos_binaries) / sizeof(char*)-1))
 
-char bin_dir[256] = "./   6 ../   0 ";
+char bin_dir[1024] = "./   7 ../   0 ";
 char* contents[]  = {
-    "./   0 ../   0 home/   1 bin/   6 ",
+    "./   0 ../   0 home/   1 bin/   7 ",
     "./   1 ../   0 yunhao/   2 rvr/   3 yacqub/   4 ",
-    "./   2 ../   1 README   5 ",
+    "./   2 ../   1 README   5  TRY 6 ",
     "./   3 ../   1 ",
     "./   4 ../   1 ",
-    "With only 2000 lines of code, egos-2000 implements boot loader, SD card "
+    "With only 2000 lines \n of code, egos-2000 implements boot loader, SD card "
      "driver, tty driver, virtual memory with page tables, interrupt and "
      "exception handling, preemptive scheduler, system call, file system, "
      "shell, an Ethernet/UDP demo, several user commands, and the mkfs tool. "
      "Moreover, the EGOS book (https://egos.fun) contains 9 course projects.",
-    bin_dir};
+    "Lorem ipsum \ndolor sit amet, consectetur adipiscing elit.\n Praesent metus augue, faucibus id arcu ut, viverra dignissim eros. \n Etiam hendrerit lorem non suscipit condimentum. Praesent suscipit nec sem id finibus. \n Duis vitae sapien diam. Proin blandit pretium scelerisque. Pellentesque ultrices, sem in \n interdum accumsan, nisl ligula ultrices nisl, nec imperdiet eros augue eu orci. Nam molestie venenatis condimentum. Proin imperdiet lorem sed libero blandit sollicitudin. Fusce blandit velit non risus gravida, nec egestas mauris condimentum.  \n Orci varius natoque penatibus et magnis dis parturient est.\n"
+,
+     bin_dir};
 #define BIN_DIR_INODE ((sizeof(contents) / sizeof(char*)) - 1)
 
 char inode[SIZE_2MB], tmp[512];
@@ -96,11 +98,17 @@ int main() {
         (FILESYS == 0) ? mydisk_init(&ramdisk, 0) : treedisk_init(&ramdisk, 0);
 
     /* Write to inode 0..BIN_DIR_INODE-1 in the file system. */
-    for (uint ino = 0; ino < BIN_DIR_INODE; ino++) {
-        printf("[INFO] Load ino=%d, %ld bytes\n", ino, strlen(contents[ino]));
-        strncpy(inode, contents[ino], BLOCK_SIZE);
-        filesys->write(filesys, ino, 0, (void*)inode);
+for (uint ino = 0; ino < BIN_DIR_INODE; ino++) {
+    printf("[INFO] Load ino=%d, %ld bytes\n", ino, strlen(contents[ino]));
+
+    int file_size = strlen(contents[ino]);
+    strcpy(inode, contents[ino]);
+
+   
+    for (uint b = 0; b * BLOCK_SIZE < file_size; b++) {
+        filesys->write(filesys, ino, b, (void*)(inode + b * BLOCK_SIZE));
     }
+}
 
     /* Write to one inode for each user application. */
     uint app_ino = BIN_DIR_INODE + 1;
@@ -113,7 +121,7 @@ int main() {
             printf("[INFO] Load ino=%d, %s: %d bytes\n", app_ino, ep->d_name,
                    file_size);
 
-            /* Write the ELF format application binary into inode app_ino. */
+            /* Write the ELF format application binary into inode app_ino. */ // Changes made here from first 512 bytes to the whole file. 
             for (uint b = 0; b * BLOCK_SIZE < file_size; b++)
                 filesys->write(filesys, app_ino, b,
                                (void*)(inode + b * BLOCK_SIZE));
@@ -123,31 +131,28 @@ int main() {
             sprintf(tmp, "%s%4d ", ep->d_name, app_ino++);
             strcat(bin_dir, tmp);
         }
+        
     closedir(dp);
+
     filesys->write(filesys, BIN_DIR_INODE, 0, (void*)bin_dir);
     printf("[INFO] Load ino=%ld, %s\n", BIN_DIR_INODE, bin_dir);
 
     /* Generate the disk image file. */
-    int fd  = open("disk.img", O_CREAT | O_WRONLY, 0666);
-    int sz1 = write(fd, exec, SIZE_2MB);
-    sz1 += write(fd, fs, SIZE_2MB);
+    int fd    = open("disk.img", O_CREAT | O_WRONLY, 0666);
+    int size1 = write(fd, exec, SIZE_2MB);
+    int size2 = write(fd, fs, SIZE_2MB);
     close(fd);
+    assert(size1 + size2 == SIZE_2MB * 2);
+    printf("[INFO] Finish making the disk image (tools/disk.img)\n");
 
-    /* Generate the ROM image files. */
-    fd = open("fpgaROM.bin", O_CREAT | O_WRONLY, 0666);
+    /* Generate the ROM image file. */
+    fd = open("bootROM.bin", O_CREAT | O_WRONLY, 0666);
     assert(load_file(CPU_BIN_FILE, vexriscv) < SIZE_2MB * 2);
-    int sz2 = write(fd, vexriscv, SIZE_2MB * 2);
-    sz2 += write(fd, exec, SIZE_2MB);
-    sz2 += write(fd, fs, SIZE_2MB);
+    int size0 = write(fd, vexriscv, SIZE_2MB * 2);
+    size1     = write(fd, exec, SIZE_2MB);
+    size2     = write(fd, fs, SIZE_2MB);
     close(fd);
-
-    fd      = open("qemuROM.bin", O_CREAT | O_WRONLY, 0666);
-    int sz3 = write(fd, exec, SIZE_2MB);
-    for (uint i = 0; i < 15; i++) sz3 += write(fd, fs, SIZE_2MB);
-    /* Simply pad the image to 32MB which is required by QEMU. */
-    close(fd);
-
-    assert(sz1 == SIZE_2MB * 2 && sz2 == SIZE_2MB * 4 && sz3 == SIZE_2MB * 16);
-    printf("[INFO] Finish making the image files\n");
+    assert(size0 + size1 + size2 == SIZE_2MB * 4);
+    printf("[INFO] Finish making the boot ROM binary (tools/bootROM.bin)\n");
     return 0;
 }
