@@ -9,11 +9,18 @@
 
 #include "process.h"
 #include <string.h>
+#define MLFQ_NLEVELS          5
+#define MLFQ_RESET_PERIOD     10000000         /* 10 seconds */
+#define MLFQ_LEVEL_RUNTIME(x) (x + 1) * 100000 /* e.g., 100ms for level 0 */
 
 uint core_in_kernel;
-uint core_to_proc_idx[NCORES];
+uint core_to_proc_idx[NCORES + 1];
+/* QEMU has cores with ID #1 .. #NCORES. */
+/* Hardware has cores with ID #0 .. #NCORES-1. */
+
 struct process proc_set[MAX_NPROCESS + 1];
-/* proc_set[0] is a place holder for idle cores. */
+void core_set_idle(uint core) { core_to_proc_idx[core] = MAX_NPROCESS; }
+/* proc_set[MAX_NPROCESS] is a place holder for idle cores. */
 
 #define curr_proc_idx core_to_proc_idx[core_in_kernel]
 #define curr_pid      proc_set[curr_proc_idx].pid
@@ -71,16 +78,17 @@ static void excp_entry(uint id) {
 static void intr_entry(uint id) {
     if (id != INTR_ID_TIMER) FATAL("excp_entry: kernel got interrupt %d", id);
     /* Student's code goes here (Preemptive Scheduler). */
-
+    struct process *p = &proc_set[curr_proc_idx];
+    p->interrupt_count++;
+    proc_yield();
     /* Update the process lifecycle statistics. */
 
     /* Student's code ends here. */
-    proc_yield();
 }
 
 static void proc_yield() {
     if (curr_status == PROC_RUNNING) proc_set_runnable(curr_pid);
-
+    mlfq_reset_level();
     /* Student's code goes here (Multiple Projects). */
 
     /* [Preemptive Scheduler]
@@ -88,19 +96,43 @@ static void proc_yield() {
      * Modify the loop below to find the next process to schedule with MLFQ.
      * [System Call & Protection]
      * Do not schedule a process that should still be sleeping at this time. */
+    ulonglong now = mtime_get();
+    struct process *current_p = &proc_set[curr_proc_idx];
+    
+    ulonglong runtime = now - current_p->last_run_start_time;
+
+    if (runtime > 0) {
+        current_p->cpu_time += runtime;
+        mlfq_update_level(current_p, runtime);
+    }
+
 
     int next_idx = MAX_NPROCESS;
+    int brek = 0;
+    for (int level = 0; level < MLFQ_NLEVELS;level++ ){
+
     for (uint i = 1; i <= MAX_NPROCESS; i++) {
         struct process* p = &proc_set[(curr_proc_idx + i) % MAX_NPROCESS];
         if (p->status == PROC_PENDING_SYSCALL) proc_try_syscall(p);
 
-        if (p->status == PROC_READY || p->status == PROC_RUNNABLE) {
+        if (p->mlfq_level == level && p->status == PROC_READY || p->status == PROC_RUNNABLE) {
             next_idx = (curr_proc_idx + i) % MAX_NPROCESS;
+            brek = 1;
             break;
         }
     }
+    if (brek){
+        break;
+    }
+    
+}
 
     if (next_idx < MAX_NPROCESS) {
+        proc_set[next_idx].last_run_start_time = mtime_get();
+        if (proc_set[next_idx].response_time==0){
+            proc_set[next_idx].response_time = proc_set[next_idx].last_run_start_time - proc_set[next_idx].create_time;
+        }
+
         /* [Preemptive Scheduler]
          * Measure and record lifecycle statistics for the *next* process.
          * [System Call & Protection | Multicore & Locks]
@@ -110,7 +142,7 @@ static void proc_yield() {
         /* [Multicore & Locks]
          * Release the kernel lock.
          * [Multicore & Locks | System Call & Protection]
-         * Set curr_proc_idx to 0; Reset the timer;
+         * Set curr_proc_idx to MAX_NPROCESS; Reset the timer;
          * Enable interrupts by setting the mstatus.MIE bit to 1;
          * Wait for the next interrupt using the wfi instruction. */
 
