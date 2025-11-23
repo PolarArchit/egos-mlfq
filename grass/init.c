@@ -13,7 +13,7 @@ static void sys_proc_read(uint block_no, char* dst) {
     earth->disk_read(SYS_PROC_EXEC_START + block_no, 1, dst);
 }
 
-void grass_entry(uint core_id) {
+void grass_entry() {
     SUCCESS("Enter the grass layer");
 
     /* Initialize the grass interface. */
@@ -32,7 +32,6 @@ void grass_entry(uint core_id) {
     INFO("Load kernel process #%d: sys_process", GPID_PROCESS);
     elf_load(GPID_PROCESS, sys_proc_read, 0, 0);
     proc_set_running(proc_alloc());
-    core_to_proc_idx[core_id] = 1; /* See proc_alloc() for why. */
     earth->mmu_switch(GPID_PROCESS);
     earth->mmu_flush_cache();
 

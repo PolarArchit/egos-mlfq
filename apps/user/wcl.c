@@ -19,9 +19,9 @@ int main(int argc, char** argv) {
         char buf[BLOCK_SIZE + 1];
 
         for (int offset = 0; ; offset++) {
-
+            
             if (file_read(file_ino, offset, buf) == -1) {
-                break;
+                break; 
             }
 
             buf[BLOCK_SIZE] = '\0';

@@ -10,12 +10,15 @@
 #define LITEX_UART_TXFULL  4UL
 #define LITEX_UART_RXEMPTY 8UL
 #define LITEX_UART_EVPEND  16UL
-#define VIRT_LINE_STATUS   5UL
+
+#define SIFIVE_UART_TXDATA 0UL
+#define SIFIVE_UART_RXDATA 4UL
+#define SIFIVE_UART_IP     20UL
 
 uint uart_rx_empty() {
     return (earth->platform == HARDWARE)
                ? REGW(UART_BASE, LITEX_UART_RXEMPTY)
-               : !(REGB(UART_BASE, VIRT_LINE_STATUS) & (1 << 0));
+               : !(REGW(UART_BASE, SIFIVE_UART_IP) & 2);
 }
 
 void uart_getc(char* c) {
@@ -24,8 +27,9 @@ void uart_getc(char* c) {
         *c                                 = REGW(UART_BASE, 0) & 0xFF;
         REGW(UART_BASE, LITEX_UART_EVPEND) = 2;
     } else {
-        while (!(REGB(UART_BASE, VIRT_LINE_STATUS) & (1 << 0)));
-        *c = REGW(UART_BASE, 0) & 0xFF;
+        int ch;
+        while ((ch = REGW(UART_BASE, SIFIVE_UART_RXDATA)) & (1 << 31));
+        *c = ch & 0xFF;
     }
 }
 
@@ -35,8 +39,8 @@ void uart_putc(char c) {
         REGW(UART_BASE, 0)                 = c;
         REGW(UART_BASE, LITEX_UART_EVPEND) = 1;
     } else {
-        while (!(REGB(UART_BASE, VIRT_LINE_STATUS) & (1 << 5)));
-        REGW(UART_BASE, 0) = c;
+        while ((REGW(UART_BASE, SIFIVE_UART_TXDATA) & (1 << 31)));
+        REGW(UART_BASE, SIFIVE_UART_TXDATA) = c;
     }
 }
 

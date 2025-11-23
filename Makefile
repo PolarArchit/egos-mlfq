@@ -53,27 +53,21 @@ $(USRAPP_ELFS): $(RELEASE)/user/%.elf : apps/user/%.c $(APPS_DEPS)
 	@$(OBJDUMP) $(DEBUG_FLAGS) $@ > $(patsubst %.c, $(DEBUG)/%.lst, $(notdir $<))
 
 install: egos
-	@printf "$(GREEN)-------- Create the Disk & ROM Images --------$(END)\n"
-	$(OBJCOPY) -O binary $(RELEASE)/egos.elf tools/egos.bin
+	@printf "$(GREEN)-------- Create the Disk & BootROM Image --------$(END)\n"
+	$(OBJCOPY) -O binary $(RELEASE)/egos.elf tools/qemu/egos.bin
 	$(CC) tools/mkfs.c library/file/file$(FILESYS).c -DMKFS -DFILESYS=$(FILESYS) -DCPU_BIN_FILE="\"fpga/$(BOARD).bin\"" $(INCLUDE) -o tools/mkfs
-	cd tools; rm -f disk.img fpgaROM.bin qemuROM.bin; ./mkfs
-
-QEMU_MACHINE = -M virt -smp 4 -m 8M -bios tools/egos.bin
-QEMU_GRAPHIC = -nographic# -device VGA,addr=0x2 -serial mon:stdio
-QEMU_FLASH_1 = -drive if=pflash,format=raw,unit=1,file=tools/qemuROM.bin
-QEMU_NIC_ETH = -device e1000,netdev=E1000,addr=0x3 -netdev socket,id=E1000,listen=:1234
-QEMU_SD_CARD = -device sdhci-pci,addr=0x1 -device sd-card,drive=MMC -drive if=none,file=tools/disk.img,format=raw,id=MMC
+	cd tools; rm -f disk.img bootROM.bin; ./mkfs
 
 qemu: install
 	@printf "$(YELLOW)-------- Simulate on QEMU-RISCV --------$(END)\n"
-	$(QEMU) $(QEMU_MACHINE) $(QEMU_GRAPHIC) $(QEMU_FLASH_1) $(QEMU_SD_CARD)
+	$(QEMU) -nographic -readconfig tools/qemu/config.toml
 
 program: install
 	@printf "$(YELLOW)-------- Program the $(BOARD) on-board ROM --------$(END)\n"
-	openFPGALoader -b $(BOARD) -f tools/fpgaROM.bin
+	openFPGALoader -b $(BOARD) -f tools/bootROM.bin
 
 clean:
-	rm -rf build tools/egos.bin tools/mkfs tools/disk.img tools/fpgaROM.bin tools/qemuROM.bin
+	rm -rf build tools/mkfs tools/mkrom tools/qemu/egos.bin tools/disk.img tools/bootROM.bin
 
 GREEN = \033[1;32m
 YELLOW = \033[1;33m

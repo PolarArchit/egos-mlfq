@@ -1,11 +1,5 @@
-/*
- * (C) 2025, Cornell University
- * All rights reserved.
- *
- * Description: a simple cat
- */
-
 #include "app.h"
+#include <string.h>
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -13,18 +7,22 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    /* Get the inode number of the file. */
     int file_ino = dir_lookup(workdir_ino, argv[1]);
     if (file_ino < 0) {
         INFO("cat: file %s not found", argv[1]);
         return -1;
     }
+    char buf[BLOCK_SIZE + 1];
 
-    /* Read and print the first block of the inode. */
-    char buf[BLOCK_SIZE];
-    file_read(file_ino, 0, buf);
-    printf("%s", buf);
-    if (buf[strlen(buf) - 1] != '\n') printf("\n\r");
-
+    for (int offset = 0; ; offset++) {
+        
+        if (file_read(file_ino, offset, buf) == -1) {
+            break;
+        }
+        buf[BLOCK_SIZE] = '\0';
+        printf("%s", buf);
+    }
+    
+    printf("\n\r"); 
     return 0;
 }

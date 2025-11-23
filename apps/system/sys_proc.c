@@ -9,6 +9,7 @@
 #include "app.h"
 #include "elf.h"
 #include "disk.h"
+#include <string.h>
 
 static int app_ino, app_pid;
 static void sys_spawn(uint base);
