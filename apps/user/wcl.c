@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         int file_ino = dir_lookup(workdir_ino, argv[i]);
         if (file_ino < 0) {
-            INFO("wcl: file %s not found", argv[i]);
+            INFO("wcl: file %s not found", argv[i]); // if this file is not found it does not break, instead ignores the files not found
             continue;
         }
 
@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
 
         for (int offset = 0; ; offset++) {
             
-            if (file_read(file_ino, offset, buf) == -1) {
+            if (file_read(file_ino, offset, buf) == -1) { // if the offset is too large, it returns -1 and also prints !!TDERROR OFFSET TOO LARGE, which should be ignored
                 break; 
             }
 
