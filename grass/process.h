@@ -23,13 +23,20 @@ struct process {
     enum proc_status status;
     uint mepc, saved_registers[SAVED_REGISTER_NUM];
     /* Student's code goes here (Preemptive Scheduler | System Call). */
-
+    ulonglong create_time;
+    ulonglong response_time;
+    ulonglong cpu_time;
+    ulonglong last_run_start_time;
+    int interrupt_count;
     /* Add new fields for lifecycle statistics, MLFQ or process sleep. */
+    int mlfq_level;
+    long long mlfq_remaining_time;
 
     /* Student's code ends here. */
 };
 
 ulonglong mtime_get();
+void core_set_idle(uint);
 
 int proc_alloc();
 void proc_free(int);
@@ -42,5 +49,3 @@ void mlfq_reset_level();
 void mlfq_update_level(struct process* p, ulonglong runtime);
 void proc_sleep(int pid, uint usec);
 void proc_coresinfo();
-
-extern uint core_to_proc_idx[NCORES];
